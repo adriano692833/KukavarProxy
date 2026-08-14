@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>KrcMonitor.Probe</RootNamespace>
+    <AssemblyName>KrcMonitor.Probe</AssemblyName>
+    <StartupObject>KrcMonitor.Probe.Program</StartupObject>
+
+    <!--
+      x86 is mandatory, not a preference.
+
+      WBC_KrcLib (Cross3Krc.CIE) is a 32-bit in-process COM server. A 64-bit
+      process cannot load it: CoCreateInstance fails with REGDB_E_CLASSNOTREG
+      even when the library is correctly registered, because the 64-bit
+      registry view has no entry for it. Building AnyCPU produces a binary
+      that works on a 32-bit controller and fails on a 64-bit dev box with a
+      misleading error.
+    -->
+    <PlatformTarget>x86</PlatformTarget>
+    <Prefer32Bit>true</Prefer32Bit>
+
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <OptionInfer>On</OptionInfer>
+    <OptionCompare>Binary</OptionCompare>
+
+    <LangVersion>latest</LangVersion>
+    <NeutralLanguage>en</NeutralLanguage>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>BC42104;BC42030;BC42016</WarningsAsErrors>
+
+    <Company>KrcMonitor</Company>
+    <Product>KrcMonitor Probe</Product>
+    <AssemblyTitle>KrcMonitor CrossComm diagnostic probe</AssemblyTitle>
+    <Description>Read-only diagnostic tool for the KUKA CrossComm (WBC_KrcLib) COM API.</Description>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      System.Windows.Forms is referenced solely for its message pump
+      (Application.Run / Control.BeginInvoke). COM callbacks from ICKAsyncVar
+      and ICKAdviseMessage are delivered as window messages and never arrive
+      on a thread that does not pump. See Interop/StaHost.vb.
+
+      No UI is created. The marshalling Control is never shown.
+    -->
+    <Reference Include="System.Windows.Forms" />
+
+    <!-- WMI, used only to tell a physical controller from a VM. -->
+    <Reference Include="System.Management" />
+  </ItemGroup>
+
+</Project>
