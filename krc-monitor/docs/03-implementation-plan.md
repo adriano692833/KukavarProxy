@@ -79,16 +79,64 @@ danych, tańszą drogą może być kolektor po `snap7` zamiast agenta na 400 rob
 - [ ] Znana wersja .NET Framework na flocie
 - [ ] Potwierdzona trasa sieciowa robot → planowany kolektor
 - [ ] Uzyskana zgoda organizacyjna na instalację software'u na kontrolerze
-- [ ] Dostępny robot testowy do wyłącznej dyspozycji projektu
+- [ ] Dostępna instancja OfficeLite / VirtualKRC (dla etapu 1a)
+- [ ] Zaplanowany dostęp do kontrolera fizycznego offline (dla etapu 1b)
 
-**Jeśli którykolwiek punkt jest niespełniony, faza 1 się nie zaczyna.**
+**Etap 1a może ruszyć na samej VM.** Etap 1b bez kontrolera fizycznego nie ruszy,
+a bez etapu 1b nie wolno wejść w fazę 5 — bo budżety zasobów byłyby oparte
+na pomiarach z maszyny wirtualnej.
 
 ---
 
-## Faza 1 — Probe (1 tydzień)
+## Faza 1 — Probe (1 tydzień + powtórka na sprzęcie)
 
 **Cel:** odpowiedzieć na 8 otwartych pytań z [`02-crosscomm-api.md` §12](02-crosscomm-api.md).
 To faza badawcza, nie produkcyjna.
+
+### 1.0 Podział: maszyna wirtualna, potem fizyczna
+
+Faza 1 startuje na **KUKA.OfficeLite / VirtualKRC**, a dopiero potem powtarza się
+na fizycznym kontrolerze. To właściwa kolejność — VM nic nie kosztuje, gdy się ją
+zepsuje, a powierzchnia API CrossComm jest ta sama.
+
+Ale wirtualizowany KSS **nie jest systemem czasu rzeczywistego** i dwie klasy
+wyników się nie przenoszą:
+
+| Przenosi się z VM na sprzęt | **Nie** przenosi się |
+|---|---|
+| Które serwisy istnieją | Koszt CPU i RAM |
+| Sygnatury metod, IID-y, offsety vtable | Jitter callbacków |
+| Czy `ShowMultiVar` istnieje | Minimalny sensowny `nInterval` |
+| Limit `SetInfo` | Zachowanie przy cyklu produkcyjnym |
+| Formaty wartości zwracanych przez `ShowVar` | Konkurencja ze smartHMI |
+| Czy callbacki STA w ogóle działają | Wpływ na responsywność HMI |
+
+**Konsekwencja praktyczna:** wynik „0,3% CPU przy interwale 200 ms" zmierzony na
+OfficeLite nie mówi nic o KR C4 w cyklu spawalni. Budżety zasobów z
+[`01-architecture.md` §5](01-architecture.md) muszą zostać zmierzone ponownie
+na sprzęcie przed fazą 5.
+
+**Pułapka na dane:** na OfficeLite część zmiennych jest nieobecna albo zawiera
+wartości zastępcze. Dotyczy to w szczególności **`$KR_SERIALNO`**, który ma być
+tożsamością robota w certyfikacie mTLS ([`06-protocol.md`](06-protocol.md)).
+Jeśli na VM jest pusty lub domyślny — **nie buduj PKI wokół niego, dopóki nie
+potwierdzisz na sprzęcie.** Gdyby okazał się niestabilny lub nieunikalny,
+potrzebna jest alternatywna tożsamość (numer inwentarzowy, nazwa hosta).
+
+`KrcMonitor.Probe.exe env` rozpoznaje, na czym działa, i wypisuje powyższe
+zastrzeżenia przy każdym pomiarze — żeby liczba z OfficeLite nigdy nie została
+później zacytowana jako pochodząca z kontrolera.
+
+### Etapy fazy 1
+
+| Etap | Gdzie | Co |
+|---|---|---|
+| 1a | OfficeLite / VirtualKRC | Kształt API, IID-y, formaty wartości, `dump-typelib`, funkcjonalne E1–E8 |
+| 1b | Kontroler fizyczny (offline) | Powtórka kompletu + wszystkie pomiary czasowe i obciążeniowe |
+
+Zapisz wynik `dump-typelib` z obu środowisk i **porównaj je** — każda różnica
+w powierzchni API między VM a sprzętem jest sama w sobie wynikiem fazy 1
+i musi trafić do `02-crosscomm-api.md`.
 
 ### 1.1 Interop assembly
 
@@ -133,11 +181,25 @@ Funkcje:
 
 ### Kryteria wyjścia z fazy 1
 
-- [ ] Wszystkie 8 pytań z §12 ma udokumentowaną odpowiedź
-- [ ] `02-crosscomm-api.md` zaktualizowany o rzeczywiste sygnatury
-- [ ] E3 rozstrzygnięty — wiadomo, czy potrzebna logika re-subskrypcji
-- [ ] Zmierzony narzut CPU/RAM przy docelowej liczbie zmiennych
+**Etap 1a (VM):**
+- [ ] `dump-typelib` wykonany, wynik zapisany
+- [ ] Rzeczywiste sygnatury i IID-y w `02-crosscomm-api.md`
+- [ ] Rozstrzygnięte, czy `ShowMultiVar` istnieje i jak się ją woła
 - [ ] Potwierdzone, że callbacki STA działają w aplikacji bez okna
+- [ ] Formaty wartości `ShowVar` udokumentowane, parsery pokryte testami
+- [ ] E3 rozstrzygnięty — wiadomo, czy potrzebna logika re-subskrypcji
+
+**Etap 1b (kontroler fizyczny) — dodatkowo:**
+- [ ] `dump-typelib` porównany z wynikiem z VM, różnice opisane
+- [ ] `$KR_SERIALNO` potwierdzony jako obecny, unikalny i stabilny
+- [ ] Zmierzony narzut CPU/RAM przy docelowej liczbie zmiennych
+- [ ] Zmierzony minimalny sensowny `nInterval`
+- [ ] E5 wykonany przy działającym smartHMI
+- [ ] Budżety zasobów w `01-architecture.md` §5 skorygowane pomiarami
+
+> Wyniki czasowe z etapu 1a **nie zamykają** żadnego z punktów etapu 1b.
+> Przeniesienie liczby z VM do dokumentacji jako pomiaru z kontrolera jest
+> błędem, który ujawni się dopiero w fazie 5 albo na produkcji.
 
 > **Bramka decyzyjna.** Jeśli faza 1 wykaże, że `SetInfo` jest niestabilny albo
 > generuje istotne obciążenie, wracamy do projektu: polling `ShowMultiVar` z niską
